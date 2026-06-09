@@ -6,6 +6,8 @@ It lives **inline in the PR comment thread** as a clickable accordion: you check
 
 Non-blocking by default — it posts a `VibeCheck` commit status that shows on the PR but only gates merge if you opt in via branch protection. Self-hosted: you run your own copy, so quizzes use *your* Anthropic key and your code never touches anyone else's server.
 
+Inspired by [Arman](https://github.com/iarmankhan) and [Alex](https://github.com/Ajohnson18) — thanks for sifting through my AI slop.
+
 ![A VibeCheck quiz on a pull request](docs/quiz.png)
 
 ## Setup
@@ -105,3 +107,5 @@ Running it locally, the repo layout, and the server API live in [CONTRIBUTING.md
 - **Optional OpenAI provider** — abstract the LLM call so adopters can supply an OpenAI key instead of Anthropic. (Today: Anthropic only.)
 - **Redis-backed sessions** — survive server restarts.
 - **Difficulty modes** — expose `difficulty`/`focus` as workflow inputs.
+
+
