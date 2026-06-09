@@ -9,6 +9,7 @@ import {
   sessionCount,
 } from "./sessions";
 import { QuizConfig } from "./types";
+import { verifyGitHubOIDC, OIDC_ENABLED, ALLOWED_OWNERS } from "./auth";
 
 const app = express();
 app.use(express.json({ limit: "15mb" }));
@@ -16,6 +17,42 @@ app.use(express.json({ limit: "15mb" }));
 app.get("/health", (_req: Request, res: Response) => {
   res.json({ ok: true, sessions: sessionCount() });
 });
+
+// Gate every /quiz/* route behind GitHub Actions OIDC verification.
+// The workflow sends a per-run OIDC token as `Authorization: Bearer <jwt>`;
+// we verify it and confirm the calling repo's owner is allowlisted. As defense
+// in depth, the token's repository must match the `repo` in the request body,
+// so a workflow in one repo can't touch another repo's quiz session.
+async function requireGitHubOIDC(
+  req: Request,
+  res: Response,
+  next: () => void
+) {
+  if (!OIDC_ENABLED) return next(); // unconfigured (e.g. local dev) — open
+  try {
+    const header = req.header("authorization") || "";
+    const match = header.match(/^Bearer (.+)$/);
+    if (!match) return res.status(401).json({ error: "missing bearer token" });
+
+    const result = await verifyGitHubOIDC(match[1]);
+    if (!result.ok) {
+      return res.status(401).json({ error: "unauthorized", reason: result.reason });
+    }
+
+    const bodyRepo = (req.body?.repo as string | undefined)?.toLowerCase();
+    if (bodyRepo && result.repository && bodyRepo !== result.repository.toLowerCase()) {
+      return res
+        .status(403)
+        .json({ error: "token repository does not match request repo" });
+    }
+    next();
+  } catch (err) {
+    console.error("auth error:", err);
+    res.status(401).json({ error: "unauthorized" });
+  }
+}
+
+app.use("/quiz", requireGitHubOIDC);
 
 // Generate a quiz from a diff, store it, return the comment markdown.
 // Body: { repo: string, pr: number, diff: string, config?: QuizConfig }
@@ -99,4 +136,12 @@ app.post("/quiz/cleanup", (req: Request, res: Response) => {
 const port = parseInt(process.env.PORT || "3000", 10);
 app.listen(port, () => {
   console.log(`pr-quiz server listening on :${port}`);
+  if (OIDC_ENABLED) {
+    console.log(`OIDC auth ON — allowed owners: ${ALLOWED_OWNERS.join(", ")}`);
+  } else {
+    console.warn(
+      "WARNING: QUIZ_ALLOWED_OWNERS is unset — /quiz/* endpoints are UNAUTHENTICATED. " +
+        "Set it in production to lock the server to your GitHub owner/org."
+    );
+  }
 });

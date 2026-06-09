@@ -92,6 +92,22 @@ To make the quiz **block merge**, add `pr-quiz` as a required status check in br
 
 The server never needs GitHub credentials — the workflow runs in repo context, grabs the diff, and does all GitHub writes itself.
 
+## Security (GitHub Actions OIDC)
+
+The `/quiz/*` endpoints are locked down with **GitHub Actions OIDC** — no shared secret. Each workflow run mints a short-lived token that cryptographically proves it's a real Actions run from one of your repos; the server verifies it against GitHub's public keys and checks the repo owner against an allowlist.
+
+Set on the **server** (Railway variable):
+
+```
+QUIZ_ALLOWED_OWNERS=boJackEden        # comma-separated owners/orgs allowed to call the server
+```
+
+That's the only setup. Any repo under an allowlisted owner works by **just copying the workflow** — the workflow already requests the OIDC token (`id-token: write` + `core.getIDToken('pr-quiz')`) and sends it as a bearer token. No per-repo secret.
+
+Defense in depth: the token also names the calling repo, and the server rejects a request whose `repo` body doesn't match the token's repository — so a workflow in one repo can't touch another's quiz session.
+
+> If `QUIZ_ALLOWED_OWNERS` is unset the endpoints are open (fine for local dev, logged as a warning at boot). Always set it in production.
+
 ## Known MVP limitations
 
 - **Sessions are in-memory.** A server restart between quiz generation and submission loses the correct answers (they're never in the PR comment). Re-run the workflow to regenerate. Swap `sessions.ts` for Redis to survive restarts.

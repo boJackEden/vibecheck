@@ -18,6 +18,7 @@ permissions:
   contents: read
   pull-requests: write
   statuses: write
+  id-token: write # mint the OIDC token the server verifies
 
 jobs:
   # 1) PR opened/updated -> generate the quiz and post the interactive comment.
@@ -43,9 +44,10 @@ jobs:
             const pr = context.payload.pull_request.number;
             const headSha = context.payload.pull_request.head.sha;
 
+            const idToken = await core.getIDToken('pr-quiz');
             const res = await fetch(`${process.env.QUIZ_SERVER_URL}/quiz/generate`, {
               method: 'POST',
-              headers: { 'content-type': 'application/json' },
+              headers: { 'content-type': 'application/json', authorization: `Bearer ${idToken}` },
               body: JSON.stringify({ repo, pr, diff }),
             });
             if (!res.ok) { core.setFailed(`Server ${res.status}: ${await res.text()}`); return; }
@@ -88,9 +90,10 @@ jobs:
             const pr = context.payload.issue.number;
             const commentBody = context.payload.comment.body;
 
+            const idToken = await core.getIDToken('pr-quiz');
             const res = await fetch(`${process.env.QUIZ_SERVER_URL}/quiz/grade`, {
               method: 'POST',
-              headers: { 'content-type': 'application/json' },
+              headers: { 'content-type': 'application/json', authorization: `Bearer ${idToken}` },
               body: JSON.stringify({ repo, pr, commentBody }),
             });
             if (!res.ok) { core.setFailed(`Server ${res.status}: ${await res.text()}`); return; }
@@ -120,8 +123,9 @@ jobs:
           script: |
             const repo = `${context.repo.owner}/${context.repo.repo}`;
             const pr = context.payload.pull_request.number;
+            const idToken = await core.getIDToken('pr-quiz');
             await fetch(`${process.env.QUIZ_SERVER_URL}/quiz/cleanup`, {
               method: 'POST',
-              headers: { 'content-type': 'application/json' },
+              headers: { 'content-type': 'application/json', authorization: `Bearer ${idToken}` },
               body: JSON.stringify({ repo, pr }),
             }).catch(() => {});
