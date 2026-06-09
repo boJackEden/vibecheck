@@ -14,7 +14,7 @@ Two steps: deploy the server once, then drop a small workflow into each repo.
 
 ### 1. Deploy the server
 
-[![Deploy on Railway](https://railway.com/button.svg)](https://railway.com/deploy/4H9pFt?referralCode=aZGRIM)
+[![Deploy on Railway](https://railway.com/button.svg)](https://railway.com/deploy/vibecheck)
 
 Click the button and fill in the two prompted variables:
 
@@ -50,7 +50,7 @@ jobs:
           server-url: ${{ vars.VIBECHECK_SERVER_URL }}
 ```
 
-Then, in **GitHub**, go to your repo's **Settings → Secrets and variables → Actions → Variables** and add `VIBECHECK_SERVER_URL` = your domain from step 1. Set it at the GitHub **org** level instead and every repo inherits it — adding VibeCheck to a new repo is then just this one file.
+Then, in **GitHub**, go to your repo's **Settings → Secrets and variables → Actions → Variables** and add `VIBECHECK_SERVER_URL` = your domain from step 1 (e.g. `https://vibecheck-production.up.railway.app`). Set it at the GitHub **org** level instead and every repo inherits it — adding VibeCheck to a new repo is then just this one file.
 
 Open a PR and you'll see the quiz. To **block merge** on it, add `VibeCheck` as a required status check in branch protection (otherwise it's informational).
 
