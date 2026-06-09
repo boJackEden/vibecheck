@@ -1,11 +1,15 @@
 # Copy this into a consuming repo as .github/workflows/pr-quiz.yml
 #
 # Requires one repository variable:
-#   QUIZ_SERVER_URL  -> the base URL of your deployed pr-quiz server (e.g. https://pr-quiz.up.railway.app)
+#   QUIZ_SERVER_URL  -> the base URL of your deployed pr-quiz server
+#                       (e.g. https://pr-quiz-production.up.railway.app)
 # Set it under: Settings -> Secrets and variables -> Actions -> Variables.
 #
-# No Anthropic key is needed here — the server holds it. This workflow only
-# sends the diff to your server and posts/edits the PR comment + commit status.
+# No Anthropic key is needed here — the server holds it. Auth is via GitHub
+# Actions OIDC (the server allowlists your owner), so there's no secret to set.
+#
+# Everything lives in ONE job with event-conditional steps, so the PR shows a
+# single "PR Quiz" check — never skipped sibling jobs.
 name: PR Quiz
 
 on:
@@ -21,17 +25,23 @@ permissions:
   id-token: write # mint the OIDC token the server verifies
 
 jobs:
-  # 1) PR opened/updated -> generate the quiz and post the interactive comment.
-  generate:
-    if: github.event_name == 'pull_request' && github.event.action != 'closed' && github.event.pull_request.user.type != 'Bot'
+  quiz:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      # --- Generate (PR opened/updated by a human) ---
+      - name: Checkout
+        if: github.event_name == 'pull_request' && github.event.action != 'closed' && github.event.pull_request.user.type != 'Bot'
+        uses: actions/checkout@v4
         with:
           fetch-depth: 0
+
       - name: Collect diff
+        if: github.event_name == 'pull_request' && github.event.action != 'closed' && github.event.pull_request.user.type != 'Bot'
         run: git diff "origin/${{ github.base_ref }}...HEAD" > diff.txt
-      - uses: actions/github-script@v7
+
+      - name: Generate quiz
+        if: github.event_name == 'pull_request' && github.event.action != 'closed' && github.event.pull_request.user.type != 'Bot'
+        uses: actions/github-script@v7
         env:
           QUIZ_SERVER_URL: ${{ vars.QUIZ_SERVER_URL }}
         with:
@@ -40,12 +50,14 @@ jobs:
             const diff = fs.readFileSync('diff.txt', 'utf8');
             if (!diff.trim()) { core.info('Empty diff, skipping.'); return; }
 
+            const base = (process.env.QUIZ_SERVER_URL || '')
+              .replace(/\/$/, '').replace(/^(?!https?:\/\/)/, 'https://');
             const repo = `${context.repo.owner}/${context.repo.repo}`;
             const pr = context.payload.pull_request.number;
             const headSha = context.payload.pull_request.head.sha;
 
             const idToken = await core.getIDToken('pr-quiz');
-            const res = await fetch(`${process.env.QUIZ_SERVER_URL}/quiz/generate`, {
+            const res = await fetch(`${base}/quiz/generate`, {
               method: 'POST',
               headers: { 'content-type': 'application/json', authorization: `Bearer ${idToken}` },
               body: JSON.stringify({ repo, pr, diff }),
@@ -53,7 +65,6 @@ jobs:
             if (!res.ok) { core.setFailed(`Server ${res.status}: ${await res.text()}`); return; }
             const { comment } = await res.json();
 
-            // Upsert our single quiz comment (identified by the marker).
             const comments = await github.paginate(github.rest.issues.listComments, {
               ...context.repo, issue_number: pr,
             });
@@ -64,34 +75,32 @@ jobs:
               await github.rest.issues.createComment({ ...context.repo, issue_number: pr, body: comment });
             }
 
-            // Non-blocking status: shows up on the PR but only gates merge if you
-            // make "pr-quiz" a required status check in branch protection.
             await github.rest.repos.createCommitStatus({
               ...context.repo, sha: headSha, context: 'pr-quiz',
               state: 'pending', description: 'Answer the quiz to pass',
             });
 
-  # 2) Developer checked the Submit box -> grade and post the result + status.
-  grade:
-    if: >
-      github.event_name == 'issue_comment' &&
-      github.event.issue.pull_request &&
-      contains(github.event.comment.body, '<!-- pr-quiz -->') &&
-      contains(github.event.comment.body, '[x] ✅') &&
-      !contains(github.event.comment.body, '<!-- pr-quiz:graded -->')
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/github-script@v7
+      # --- Grade (developer checked the Submit box) ---
+      - name: Grade quiz
+        if: >
+          github.event_name == 'issue_comment' &&
+          github.event.issue.pull_request &&
+          contains(github.event.comment.body, '<!-- pr-quiz -->') &&
+          contains(github.event.comment.body, '[x] ✅') &&
+          !contains(github.event.comment.body, '<!-- pr-quiz:graded -->')
+        uses: actions/github-script@v7
         env:
           QUIZ_SERVER_URL: ${{ vars.QUIZ_SERVER_URL }}
         with:
           script: |
+            const base = (process.env.QUIZ_SERVER_URL || '')
+              .replace(/\/$/, '').replace(/^(?!https?:\/\/)/, 'https://');
             const repo = `${context.repo.owner}/${context.repo.repo}`;
             const pr = context.payload.issue.number;
             const commentBody = context.payload.comment.body;
 
             const idToken = await core.getIDToken('pr-quiz');
-            const res = await fetch(`${process.env.QUIZ_SERVER_URL}/quiz/grade`, {
+            const res = await fetch(`${base}/quiz/grade`, {
               method: 'POST',
               headers: { 'content-type': 'application/json', authorization: `Bearer ${idToken}` },
               body: JSON.stringify({ repo, pr, commentBody }),
@@ -111,20 +120,20 @@ jobs:
               description: `Quiz ${result.passed ? 'passed' : 'failed'}: ${result.score}/${result.total}`,
             });
 
-  # 3) PR merged/closed -> free the in-memory session on the server.
-  cleanup:
-    if: github.event_name == 'pull_request' && github.event.action == 'closed'
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/github-script@v7
+      # --- Cleanup (PR merged/closed) ---
+      - name: Cleanup session
+        if: github.event_name == 'pull_request' && github.event.action == 'closed'
+        uses: actions/github-script@v7
         env:
           QUIZ_SERVER_URL: ${{ vars.QUIZ_SERVER_URL }}
         with:
           script: |
+            const base = (process.env.QUIZ_SERVER_URL || '')
+              .replace(/\/$/, '').replace(/^(?!https?:\/\/)/, 'https://');
             const repo = `${context.repo.owner}/${context.repo.repo}`;
             const pr = context.payload.pull_request.number;
             const idToken = await core.getIDToken('pr-quiz');
-            await fetch(`${process.env.QUIZ_SERVER_URL}/quiz/cleanup`, {
+            await fetch(`${base}/quiz/cleanup`, {
               method: 'POST',
               headers: { 'content-type': 'application/json', authorization: `Bearer ${idToken}` },
               body: JSON.stringify({ repo, pr }),
