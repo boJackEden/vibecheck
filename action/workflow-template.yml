@@ -1,0 +1,127 @@
+# Copy this into a consuming repo as .github/workflows/pr-quiz.yml
+#
+# Requires one repository variable:
+#   QUIZ_SERVER_URL  -> the base URL of your deployed pr-quiz server (e.g. https://pr-quiz.up.railway.app)
+# Set it under: Settings -> Secrets and variables -> Actions -> Variables.
+#
+# No Anthropic key is needed here — the server holds it. This workflow only
+# sends the diff to your server and posts/edits the PR comment + commit status.
+name: PR Quiz
+
+on:
+  pull_request:
+    types: [opened, synchronize, closed]
+  issue_comment:
+    types: [edited]
+
+permissions:
+  contents: read
+  pull-requests: write
+  statuses: write
+
+jobs:
+  # 1) PR opened/updated -> generate the quiz and post the interactive comment.
+  generate:
+    if: github.event_name == 'pull_request' && github.event.action != 'closed' && github.event.pull_request.user.type != 'Bot'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Collect diff
+        run: git diff "origin/${{ github.base_ref }}...HEAD" > diff.txt
+      - uses: actions/github-script@v7
+        env:
+          QUIZ_SERVER_URL: ${{ vars.QUIZ_SERVER_URL }}
+        with:
+          script: |
+            const fs = require('fs');
+            const diff = fs.readFileSync('diff.txt', 'utf8');
+            if (!diff.trim()) { core.info('Empty diff, skipping.'); return; }
+
+            const repo = `${context.repo.owner}/${context.repo.repo}`;
+            const pr = context.payload.pull_request.number;
+            const headSha = context.payload.pull_request.head.sha;
+
+            const res = await fetch(`${process.env.QUIZ_SERVER_URL}/quiz/generate`, {
+              method: 'POST',
+              headers: { 'content-type': 'application/json' },
+              body: JSON.stringify({ repo, pr, diff }),
+            });
+            if (!res.ok) { core.setFailed(`Server ${res.status}: ${await res.text()}`); return; }
+            const { comment } = await res.json();
+
+            // Upsert our single quiz comment (identified by the marker).
+            const comments = await github.paginate(github.rest.issues.listComments, {
+              ...context.repo, issue_number: pr,
+            });
+            const existing = comments.find(c => c.body.includes('<!-- pr-quiz -->'));
+            if (existing) {
+              await github.rest.issues.updateComment({ ...context.repo, comment_id: existing.id, body: comment });
+            } else {
+              await github.rest.issues.createComment({ ...context.repo, issue_number: pr, body: comment });
+            }
+
+            // Non-blocking status: shows up on the PR but only gates merge if you
+            // make "pr-quiz" a required status check in branch protection.
+            await github.rest.repos.createCommitStatus({
+              ...context.repo, sha: headSha, context: 'pr-quiz',
+              state: 'pending', description: 'Answer the quiz to pass',
+            });
+
+  # 2) Developer checked the Submit box -> grade and post the result + status.
+  grade:
+    if: >
+      github.event_name == 'issue_comment' &&
+      github.event.issue.pull_request &&
+      contains(github.event.comment.body, '<!-- pr-quiz -->') &&
+      contains(github.event.comment.body, '[x] ✅') &&
+      !contains(github.event.comment.body, '<!-- pr-quiz:graded -->')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/github-script@v7
+        env:
+          QUIZ_SERVER_URL: ${{ vars.QUIZ_SERVER_URL }}
+        with:
+          script: |
+            const repo = `${context.repo.owner}/${context.repo.repo}`;
+            const pr = context.payload.issue.number;
+            const commentBody = context.payload.comment.body;
+
+            const res = await fetch(`${process.env.QUIZ_SERVER_URL}/quiz/grade`, {
+              method: 'POST',
+              headers: { 'content-type': 'application/json' },
+              body: JSON.stringify({ repo, pr, commentBody }),
+            });
+            if (!res.ok) { core.setFailed(`Server ${res.status}: ${await res.text()}`); return; }
+            const result = await res.json();
+            if (!result.submitted) { core.info('Not submitted yet.'); return; }
+
+            await github.rest.issues.updateComment({
+              ...context.repo, comment_id: context.payload.comment.id, body: result.comment,
+            });
+
+            const { data: prData } = await github.rest.pulls.get({ ...context.repo, pull_number: pr });
+            await github.rest.repos.createCommitStatus({
+              ...context.repo, sha: prData.head.sha, context: 'pr-quiz',
+              state: result.passed ? 'success' : 'failure',
+              description: `Quiz ${result.passed ? 'passed' : 'failed'}: ${result.score}/${result.total}`,
+            });
+
+  # 3) PR merged/closed -> free the in-memory session on the server.
+  cleanup:
+    if: github.event_name == 'pull_request' && github.event.action == 'closed'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/github-script@v7
+        env:
+          QUIZ_SERVER_URL: ${{ vars.QUIZ_SERVER_URL }}
+        with:
+          script: |
+            const repo = `${context.repo.owner}/${context.repo.repo}`;
+            const pr = context.payload.pull_request.number;
+            await fetch(`${process.env.QUIZ_SERVER_URL}/quiz/cleanup`, {
+              method: 'POST',
+              headers: { 'content-type': 'application/json' },
+              body: JSON.stringify({ repo, pr }),
+            }).catch(() => {});
