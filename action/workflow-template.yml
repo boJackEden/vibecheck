@@ -1,15 +1,11 @@
 # Copy this into a consuming repo as .github/workflows/pr-quiz.yml
 #
-# Requires one repository variable:
-#   QUIZ_SERVER_URL  -> the base URL of your deployed pr-quiz server
-#                       (e.g. https://pr-quiz-production.up.railway.app)
-# Set it under: Settings -> Secrets and variables -> Actions -> Variables.
+# Set QUIZ_SERVER_URL (your deployed server's URL) as a repo OR org variable:
+#   Settings -> Secrets and variables -> Actions -> Variables
+# Setting it at the ORG level means every repo inherits it — then adding the
+# quiz to a new repo is just dropping in this file.
 #
-# No Anthropic key is needed here — the server holds it. Auth is via GitHub
-# Actions OIDC (the server allowlists your owner), so there's no secret to set.
-#
-# Everything lives in ONE job with event-conditional steps, so the PR shows a
-# single "PR Quiz" check — never skipped sibling jobs.
+# No Anthropic key here — the server holds it. Auth is GitHub Actions OIDC.
 name: PR Quiz
 
 on:
@@ -22,119 +18,12 @@ permissions:
   contents: read
   pull-requests: write
   statuses: write
-  id-token: write # mint the OIDC token the server verifies
+  id-token: write
 
 jobs:
   quiz:
     runs-on: ubuntu-latest
     steps:
-      # --- Generate (PR opened/updated by a human) ---
-      - name: Checkout
-        if: github.event_name == 'pull_request' && github.event.action != 'closed' && github.event.pull_request.user.type != 'Bot'
-        uses: actions/checkout@v4
+      - uses: boJackEden/pr-quiz@v1
         with:
-          fetch-depth: 0
-
-      - name: Collect diff
-        if: github.event_name == 'pull_request' && github.event.action != 'closed' && github.event.pull_request.user.type != 'Bot'
-        run: git diff "origin/${{ github.base_ref }}...HEAD" > diff.txt
-
-      - name: Generate quiz
-        if: github.event_name == 'pull_request' && github.event.action != 'closed' && github.event.pull_request.user.type != 'Bot'
-        uses: actions/github-script@v7
-        env:
-          QUIZ_SERVER_URL: ${{ vars.QUIZ_SERVER_URL }}
-        with:
-          script: |
-            const fs = require('fs');
-            const diff = fs.readFileSync('diff.txt', 'utf8');
-            if (!diff.trim()) { core.info('Empty diff, skipping.'); return; }
-
-            const base = (process.env.QUIZ_SERVER_URL || '')
-              .replace(/\/$/, '').replace(/^(?!https?:\/\/)/, 'https://');
-            const repo = `${context.repo.owner}/${context.repo.repo}`;
-            const pr = context.payload.pull_request.number;
-            const headSha = context.payload.pull_request.head.sha;
-
-            const idToken = await core.getIDToken('pr-quiz');
-            const res = await fetch(`${base}/quiz/generate`, {
-              method: 'POST',
-              headers: { 'content-type': 'application/json', authorization: `Bearer ${idToken}` },
-              body: JSON.stringify({ repo, pr, diff }),
-            });
-            if (!res.ok) { core.setFailed(`Server ${res.status}: ${await res.text()}`); return; }
-            const { comment } = await res.json();
-
-            const comments = await github.paginate(github.rest.issues.listComments, {
-              ...context.repo, issue_number: pr,
-            });
-            const existing = comments.find(c => c.body.includes('<!-- pr-quiz -->'));
-            if (existing) {
-              await github.rest.issues.updateComment({ ...context.repo, comment_id: existing.id, body: comment });
-            } else {
-              await github.rest.issues.createComment({ ...context.repo, issue_number: pr, body: comment });
-            }
-
-            await github.rest.repos.createCommitStatus({
-              ...context.repo, sha: headSha, context: 'Code Understanding Check',
-              state: 'pending', description: 'Answer the quiz to pass',
-            });
-
-      # --- Grade (developer checked the Submit box) ---
-      - name: Grade quiz
-        if: >
-          github.event_name == 'issue_comment' &&
-          github.event.issue.pull_request &&
-          contains(github.event.comment.body, '<!-- pr-quiz -->') &&
-          contains(github.event.comment.body, '[x] ✅') &&
-          !contains(github.event.comment.body, '<!-- pr-quiz:graded -->')
-        uses: actions/github-script@v7
-        env:
-          QUIZ_SERVER_URL: ${{ vars.QUIZ_SERVER_URL }}
-        with:
-          script: |
-            const base = (process.env.QUIZ_SERVER_URL || '')
-              .replace(/\/$/, '').replace(/^(?!https?:\/\/)/, 'https://');
-            const repo = `${context.repo.owner}/${context.repo.repo}`;
-            const pr = context.payload.issue.number;
-            const commentBody = context.payload.comment.body;
-
-            const idToken = await core.getIDToken('pr-quiz');
-            const res = await fetch(`${base}/quiz/grade`, {
-              method: 'POST',
-              headers: { 'content-type': 'application/json', authorization: `Bearer ${idToken}` },
-              body: JSON.stringify({ repo, pr, commentBody }),
-            });
-            if (!res.ok) { core.setFailed(`Server ${res.status}: ${await res.text()}`); return; }
-            const result = await res.json();
-            if (!result.submitted) { core.info('Not submitted yet.'); return; }
-
-            await github.rest.issues.updateComment({
-              ...context.repo, comment_id: context.payload.comment.id, body: result.comment,
-            });
-
-            const { data: prData } = await github.rest.pulls.get({ ...context.repo, pull_number: pr });
-            await github.rest.repos.createCommitStatus({
-              ...context.repo, sha: prData.head.sha, context: 'Code Understanding Check',
-              state: result.passed ? 'success' : 'failure',
-              description: `Quiz ${result.passed ? 'passed' : 'failed'}: ${result.score}/${result.total}`,
-            });
-
-      # --- Cleanup (PR merged/closed) ---
-      - name: Cleanup session
-        if: github.event_name == 'pull_request' && github.event.action == 'closed'
-        uses: actions/github-script@v7
-        env:
-          QUIZ_SERVER_URL: ${{ vars.QUIZ_SERVER_URL }}
-        with:
-          script: |
-            const base = (process.env.QUIZ_SERVER_URL || '')
-              .replace(/\/$/, '').replace(/^(?!https?:\/\/)/, 'https://');
-            const repo = `${context.repo.owner}/${context.repo.repo}`;
-            const pr = context.payload.pull_request.number;
-            const idToken = await core.getIDToken('pr-quiz');
-            await fetch(`${base}/quiz/cleanup`, {
-              method: 'POST',
-              headers: { 'content-type': 'application/json', authorization: `Bearer ${idToken}` },
-              body: JSON.stringify({ repo, pr }),
-            }).catch(() => {});
+          server-url: ${{ vars.QUIZ_SERVER_URL }}

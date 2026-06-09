@@ -17,9 +17,9 @@ It's a **non-blocker by default**: the quiz posts a `Code Understanding Check` c
    - `ANTHROPIC_API_KEY` (required) — your Anthropic key
    - `QUIZ_ALLOWED_OWNERS` (required) — **your own** GitHub username or org, e.g. `boJackEden`. This locks the server to workflows from *your* repos. You're allowlisting yourself, not other users — there's no list of "people allowed to use the tool."
 3. **Generate a public domain** — Railway → service → Settings → Networking → Generate Domain. Confirm `https://<domain>/health` returns `{"ok":true}`.
-4. **Install in any of your repos** — copy [`action/workflow-template.yml`](action/workflow-template.yml) to `.github/workflows/pr-quiz.yml`, then add a repo (or org) variable `QUIZ_SERVER_URL` = your domain. Open a PR.
+4. **Install in any of your repos** — copy [`action/workflow-template.yml`](action/workflow-template.yml) to `.github/workflows/pr-quiz.yml`. It's ~16 lines and just references the published action (`uses: boJackEden/pr-quiz@v1`). Then set `QUIZ_SERVER_URL` = your domain as a variable — **set it at the org level** and every repo inherits it. Open a PR.
 
-That's it — every repo under an allowlisted owner works with just steps 4, no extra secrets (auth is via GitHub Actions OIDC).
+That's it — every repo under an allowlisted owner works with just step 4, no extra secrets (auth is via GitHub Actions OIDC). Set the org variable once and adding the quiz to a new repo is a single 16-line file.
 
 > **Publishing your own one-click button:** deploy once, then in Railway open the project → Settings → **publish as Template**, and paste the generated template URL into the button link above. Adopters then get the two variable prompts automatically.
 
@@ -53,8 +53,9 @@ The interactive UI uses GitHub's native **markdown task-list checkboxes** — cl
 
 ```
 pr-quiz/
+├── action.yml                  # the reusable composite action (uses: boJackEden/pr-quiz@v1)
 ├── action/
-│   └── workflow-template.yml   # consuming repos copy this into .github/workflows/
+│   └── workflow-template.yml   # the ~16-line workflow consuming repos copy in
 └── server/
     ├── src/
     │   ├── index.ts            # Express server (generate / grade / cleanup)
