@@ -2,7 +2,7 @@
 
 An AI-generated, multiple-choice **code-understanding quiz** that runs when you open a pull request — a "is there still a human in the loop?" gate for AI-assisted development. The quiz lives **inline in the PR comment thread** as a clickable accordion; the developer checks their answers and a Submit box, and a commit status reports pass/fail.
 
-It's a **non-blocker by default**: the quiz posts a `pr-quiz` commit status that shows on the PR but only gates merge if you opt in via branch protection.
+It's a **non-blocker by default**: the quiz posts a `Code Understanding Check` commit status that shows on the PR but only gates merge if you opt in via branch protection.
 
 **This is a self-hosted tool.** You deploy your own copy, so quizzes run on *your* Anthropic key and your code never passes through anyone else's server. No central service, no sign-up, no per-user allowlist — see [Deploy your own](#deploy-your-own) below.
 
@@ -98,7 +98,7 @@ Point Railway at this repo with root directory `server/` (the Dockerfile builds 
 
 Copy `action/workflow-template.yml` to that repo as `.github/workflows/pr-quiz.yml`, then add a repository **variable** `QUIZ_SERVER_URL` pointing at your deployed server (Settings → Secrets and variables → Actions → Variables). Open a PR to see it run.
 
-To make the quiz **block merge**, add `pr-quiz` as a required status check in branch protection. Leave it out to keep the quiz a non-blocker.
+To make the quiz **block merge**, add `Code Understanding Check` as a required status check in branch protection. Leave it out to keep the quiz a non-blocker.
 
 ## Endpoints
 

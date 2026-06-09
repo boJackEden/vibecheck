@@ -76,7 +76,7 @@ jobs:
             }
 
             await github.rest.repos.createCommitStatus({
-              ...context.repo, sha: headSha, context: 'pr-quiz',
+              ...context.repo, sha: headSha, context: 'Code Understanding Check',
               state: 'pending', description: 'Answer the quiz to pass',
             });
 
@@ -115,7 +115,7 @@ jobs:
 
             const { data: prData } = await github.rest.pulls.get({ ...context.repo, pull_number: pr });
             await github.rest.repos.createCommitStatus({
-              ...context.repo, sha: prData.head.sha, context: 'pr-quiz',
+              ...context.repo, sha: prData.head.sha, context: 'Code Understanding Check',
               state: result.passed ? 'success' : 'failure',
               description: `Quiz ${result.passed ? 'passed' : 'failed'}: ${result.score}/${result.total}`,
             });
