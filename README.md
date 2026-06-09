@@ -4,6 +4,25 @@ An AI-generated, multiple-choice **code-understanding quiz** that runs when you 
 
 It's a **non-blocker by default**: the quiz posts a `pr-quiz` commit status that shows on the PR but only gates merge if you opt in via branch protection.
 
+**This is a self-hosted tool.** You deploy your own copy, so quizzes run on *your* Anthropic key and your code never passes through anyone else's server. No central service, no sign-up, no per-user allowlist — see [Deploy your own](#deploy-your-own) below.
+
+## Deploy your own
+
+[![Deploy on Railway](https://railway.com/button.svg)](https://railway.com/new/template)
+<!-- ^ Replace the URL above with your published Railway template URL
+     (Railway → your project → Settings → publish as Template). -->
+
+1. **Deploy the server.** Click the button (or in Railway: New Project → Deploy from GitHub → this repo, root directory `server/`).
+2. **Set two variables** when prompted:
+   - `ANTHROPIC_API_KEY` (required) — your Anthropic key
+   - `QUIZ_ALLOWED_OWNERS` (required) — **your own** GitHub username or org, e.g. `boJackEden`. This locks the server to workflows from *your* repos. You're allowlisting yourself, not other users — there's no list of "people allowed to use the tool."
+3. **Generate a public domain** — Railway → service → Settings → Networking → Generate Domain. Confirm `https://<domain>/health` returns `{"ok":true}`.
+4. **Install in any of your repos** — copy [`action/workflow-template.yml`](action/workflow-template.yml) to `.github/workflows/pr-quiz.yml`, then add a repo (or org) variable `QUIZ_SERVER_URL` = your domain. Open a PR.
+
+That's it — every repo under an allowlisted owner works with just steps 4, no extra secrets (auth is via GitHub Actions OIDC).
+
+> **Publishing your own one-click button:** deploy once, then in Railway open the project → Settings → **publish as Template**, and paste the generated template URL into the button link above. Adopters then get the two variable prompts automatically.
+
 ## How it works
 
 ```
@@ -119,3 +138,9 @@ Defense in depth: the token also names the calling repo, and the server rejects 
 ## Tuning (post-MVP)
 
 `quiz.ts` accepts a `config` (`difficulty`, `focus`, `passRatio`) — wire it through the workflow as env/inputs to add difficulty modes. Pass threshold defaults to 70% (`QUIZ_PASS_RATIO`).
+
+## Roadmap
+
+- **Optional OpenAI provider** — abstract the LLM call so adopters can supply an OpenAI key instead of Anthropic. (Today: Anthropic only.)
+- **Redis-backed sessions** — survive server restarts (today: in-memory).
+- **Difficulty modes** — expose `difficulty`/`focus` as workflow inputs.
