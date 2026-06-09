@@ -1,8 +1,12 @@
 # VibeCheck
 
-**Make sure _you_ understand what's going into _your_ codebase.** VibeCheck runs when you open a pull request and asks a few AI-generated multiple-choice questions about the diff — a "is there still a human in the loop?" check for AI-assisted development. It lives **inline in the PR comment thread** as a clickable accordion: you check your answers and a Submit box, and a commit status reports the result.
+**Make sure _you_ understand what's going into _your_ codebase.** VibeCheck runs when you open a pull request and asks a few AI-generated multiple-choice questions about the diff. 
+
+It lives **inline in the PR comment thread** as a clickable accordion: you check your answers and a Submit box, and a commit status reports the result.
 
 Non-blocking by default — it posts a `VibeCheck` commit status that shows on the PR but only gates merge if you opt in via branch protection. Self-hosted: you run your own copy, so quizzes use *your* Anthropic key and your code never touches anyone else's server.
+
+![A VibeCheck quiz on a pull request](docs/quiz.png)
 
 ## Setup
 
@@ -46,7 +50,7 @@ jobs:
           server-url: ${{ vars.VIBECHECK_SERVER_URL }}
 ```
 
-Then add `VIBECHECK_SERVER_URL` (your domain from step 1) under **Settings → Secrets and variables → Actions → Variables**. Set it at the **org** level and every repo inherits it — adding VibeCheck to a new repo is then just this one file.
+Then, in **GitHub**, go to your repo's **Settings → Secrets and variables → Actions → Variables** and add `VIBECHECK_SERVER_URL` = your domain from step 1. Set it at the GitHub **org** level instead and every repo inherits it — adding VibeCheck to a new repo is then just this one file.
 
 Open a PR and you'll see the quiz. To **block merge** on it, add `VibeCheck` as a required status check in branch protection (otherwise it's informational).
 
@@ -76,40 +80,6 @@ The interactive UI uses GitHub's native **markdown task-list checkboxes** — cl
 | 201–500 | 7 |
 | 500+ | 10 |
 
-## Repo layout
-
-```
-vibecheck/
-├── action.yml                  # the reusable composite action (uses: boJackEden/vibecheck@v1)
-├── action/
-│   └── workflow-template.yml   # the workflow consuming repos copy in
-└── server/
-    ├── src/
-    │   ├── index.ts            # Express server (generate / grade / cleanup)
-    │   ├── quiz.ts             # Claude question generation + scaling
-    │   ├── grade.ts            # answer grading
-    │   ├── comment.ts          # build + parse the checkbox comment
-    │   ├── auth.ts             # GitHub Actions OIDC verification
-    │   ├── sessions.ts         # in-memory session store
-    │   ├── types.ts
-    │   └── test-quiz.ts        # standalone generation test (no server/GitHub)
-    ├── package.json
-    ├── tsconfig.json
-    ├── Dockerfile
-    └── .env.example
-```
-
-## Endpoints
-
-| Method | Path | Body | Returns |
-|---|---|---|---|
-| GET | `/health` | — | `{ ok, sessions }` |
-| POST | `/vibecheck/generate` | `{ repo, pr, diff, config? }` | `{ comment, count }` |
-| POST | `/vibecheck/grade` | `{ repo, pr, commentBody }` | `{ submitted, comment?, passed?, score?, total? }` |
-| POST | `/vibecheck/cleanup` | `{ repo, pr }` | `{ cleaned }` |
-
-The server never needs GitHub credentials — the workflow runs in repo context, grabs the diff, and does all GitHub writes itself.
-
 ## Security (GitHub Actions OIDC)
 
 The `/vibecheck/*` endpoints are locked down with **GitHub Actions OIDC** — no shared secret. Each workflow run mints a short-lived token that cryptographically proves it's a real Actions run from one of your repos; the server verifies it against GitHub's public keys and checks the repo owner against `VIBECHECK_ALLOWED_OWNERS`.
@@ -126,21 +96,9 @@ Defense in depth: the token also names the calling repo, and the server rejects 
 - **~10–30s latency** on `issue_comment` workflow runs (GitHub queue time).
 - **One quiz per PR**, regenerated on each push. Once graded, the comment shows results and isn't re-takeable without a fresh run.
 
-## Local development
+## Contributing
 
-```bash
-cd server
-npm install
-
-# Judge question quality with no server/GitHub — generates a quiz from a sample diff:
-ANTHROPIC_API_KEY=sk-ant-... npm run test:quiz
-
-# Run the server locally:
-cp .env.example .env   # fill in ANTHROPIC_API_KEY
-npm run dev
-```
-
-`quiz.ts` accepts a `config` (`difficulty`, `focus`, `passRatio`); pass threshold defaults to 70% (`VIBECHECK_PASS_RATIO`).
+Running it locally, the repo layout, and the server API live in [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## Roadmap
 
