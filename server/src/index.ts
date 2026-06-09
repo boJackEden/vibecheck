@@ -52,11 +52,11 @@ async function requireGitHubOIDC(
   }
 }
 
-app.use("/quiz", requireGitHubOIDC);
+app.use("/vibecheck", requireGitHubOIDC);
 
 // Generate a quiz from a diff, store it, return the comment markdown.
 // Body: { repo: string, pr: number, diff: string, config?: QuizConfig }
-app.post("/quiz/generate", async (req: Request, res: Response) => {
+app.post("/vibecheck/generate", async (req: Request, res: Response) => {
   try {
     const { repo, pr, diff, config } = req.body as {
       repo: string;
@@ -84,7 +84,7 @@ app.post("/quiz/generate", async (req: Request, res: Response) => {
 
 // Grade an edited comment body against the stored session.
 // Body: { repo: string, pr: number, commentBody: string }
-app.post("/quiz/grade", (req: Request, res: Response) => {
+app.post("/vibecheck/grade", (req: Request, res: Response) => {
   try {
     const { repo, pr, commentBody } = req.body as {
       repo: string;
@@ -124,7 +124,7 @@ app.post("/quiz/grade", (req: Request, res: Response) => {
 
 // Destroy the in-memory session (called when the PR is merged/closed).
 // Body: { repo: string, pr: number }
-app.post("/quiz/cleanup", (req: Request, res: Response) => {
+app.post("/vibecheck/cleanup", (req: Request, res: Response) => {
   const { repo, pr } = req.body as { repo: string; pr: number };
   if (!repo || !pr) {
     return res.status(400).json({ error: "repo and pr are required" });
@@ -135,12 +135,12 @@ app.post("/quiz/cleanup", (req: Request, res: Response) => {
 
 const port = parseInt(process.env.PORT || "3000", 10);
 app.listen(port, () => {
-  console.log(`pr-quiz server listening on :${port}`);
+  console.log(`vibecheck server listening on :${port}`);
   if (OIDC_ENABLED) {
     console.log(`OIDC auth ON — allowed owners: ${ALLOWED_OWNERS.join(", ")}`);
   } else {
     console.warn(
-      "WARNING: QUIZ_ALLOWED_OWNERS is unset — /quiz/* endpoints are UNAUTHENTICATED. " +
+      "WARNING: VIBECHECK_ALLOWED_OWNERS is unset — /vibecheck/* endpoints are UNAUTHENTICATED. " +
         "Set it in production to lock the server to your GitHub owner/org."
     );
   }

@@ -1,8 +1,8 @@
 import { Question, Grade } from "./types";
 
 // Markers let the workflow find/identify our comment and avoid grade loops.
-export const MARKER = "<!-- pr-quiz -->";
-export const GRADED_MARKER = "<!-- pr-quiz:graded -->";
+export const MARKER = "<!-- vibecheck -->";
+export const GRADED_MARKER = "<!-- vibecheck:graded -->";
 export const SUBMIT_LABEL = "✅ **Submit my answers**";
 
 // Build the interactive quiz comment. Each question is a <details> accordion;
@@ -11,10 +11,11 @@ export const SUBMIT_LABEL = "✅ **Submit my answers**";
 export function buildQuizComment(questions: Question[]): string {
   const parts: string[] = [
     MARKER,
-    `### 🧠 Code Understanding Check`,
+    `### 🧠 VibeCheck`,
     "",
-    `${questions.length} question${questions.length === 1 ? "" : "s"} based on your diff. ` +
-      `Expand each one, check your answer, then check **Submit** at the bottom.`,
+    `Make sure *you* understand what's going into *your* codebase. ` +
+      `${questions.length} quick question${questions.length === 1 ? "" : "s"} on this PR — ` +
+      `expand each, pick an answer, then check **Submit**.`,
     "",
   ];
 
@@ -41,7 +42,7 @@ export function buildResultComment(questions: Question[], grade: Grade): string 
   const parts: string[] = [
     MARKER,
     GRADED_MARKER,
-    `### 🧠 Code Understanding Check — ${grade.passed ? "✅ Passed" : "❌ Not passed"}`,
+    `### 🧠 VibeCheck — ${grade.passed ? "✅ Passed" : "📚 Worth another look"}`,
     "",
     `Score: **${grade.score} / ${grade.total}**`,
     "",
@@ -67,7 +68,7 @@ export function buildResultComment(questions: Question[], grade: Grade): string 
   if (!grade.passed) {
     parts.push("---");
     parts.push(
-      "_Re-run the workflow (or push a commit) to get a fresh quiz and try again._"
+      "_The goal is understanding, not a perfect score — push a commit (or re-run the workflow) for a fresh VibeCheck._"
     );
   }
   return parts.join("\n");

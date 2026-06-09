@@ -1,7 +1,7 @@
 {
-  "name": "pr-quiz-server",
+  "name": "vibecheck-server",
   "version": "0.1.0",
-  "description": "AI-generated code-understanding quiz for pull requests",
+  "description": "VibeCheck server — make sure you understand what's going into your codebase",
   "license": "MIT",
   "main": "dist/index.js",
   "scripts": {

@@ -1,12 +1,12 @@
-name: "PR Quiz"
-description: "AI-generated code-understanding quiz on pull requests. Posts an interactive checkbox quiz, grades on submit, sets a commit status."
+name: "VibeCheck"
+description: "Make sure you understand what's going into your codebase. Posts an AI-generated multiple-choice check on each PR, grades on submit, sets a commit status."
 branding:
   icon: "check-circle"
   color: "purple"
 
 inputs:
   server-url:
-    description: "Base URL of your deployed pr-quiz server (e.g. https://pr-quiz-production.up.railway.app)"
+    description: "Base URL of your deployed VibeCheck server (e.g. https://vibecheck-production.up.railway.app)"
     required: true
 
 runs:
@@ -22,27 +22,27 @@ runs:
     - name: Collect diff
       if: github.event_name == 'pull_request' && github.event.action != 'closed' && github.event.pull_request.user.type != 'Bot'
       shell: bash
-      run: git diff "origin/${{ github.base_ref }}...HEAD" > "$RUNNER_TEMP/pr-quiz-diff.txt"
+      run: git diff "origin/${{ github.base_ref }}...HEAD" > "$RUNNER_TEMP/vibecheck-diff.txt"
 
     - name: Generate quiz
       if: github.event_name == 'pull_request' && github.event.action != 'closed' && github.event.pull_request.user.type != 'Bot'
       uses: actions/github-script@v7
       env:
-        QUIZ_SERVER_URL: ${{ inputs.server-url }}
+        VIBECHECK_SERVER_URL: ${{ inputs.server-url }}
       with:
         script: |
           const fs = require('fs');
-          const diff = fs.readFileSync(`${process.env.RUNNER_TEMP}/pr-quiz-diff.txt`, 'utf8');
+          const diff = fs.readFileSync(`${process.env.RUNNER_TEMP}/vibecheck-diff.txt`, 'utf8');
           if (!diff.trim()) { core.info('Empty diff, skipping.'); return; }
 
-          const base = (process.env.QUIZ_SERVER_URL || '')
+          const base = (process.env.VIBECHECK_SERVER_URL || '')
             .replace(/\/$/, '').replace(/^(?!https?:\/\/)/, 'https://');
           const repo = `${context.repo.owner}/${context.repo.repo}`;
           const pr = context.payload.pull_request.number;
           const headSha = context.payload.pull_request.head.sha;
 
-          const idToken = await core.getIDToken('pr-quiz');
-          const res = await fetch(`${base}/quiz/generate`, {
+          const idToken = await core.getIDToken('vibecheck');
+          const res = await fetch(`${base}/vibecheck/generate`, {
             method: 'POST',
             headers: { 'content-type': 'application/json', authorization: `Bearer ${idToken}` },
             body: JSON.stringify({ repo, pr, diff }),
@@ -53,7 +53,7 @@ runs:
           const comments = await github.paginate(github.rest.issues.listComments, {
             ...context.repo, issue_number: pr,
           });
-          const existing = comments.find(c => c.body.includes('<!-- pr-quiz -->'));
+          const existing = comments.find(c => c.body.includes('<!-- vibecheck -->'));
           if (existing) {
             await github.rest.issues.updateComment({ ...context.repo, comment_id: existing.id, body: comment });
           } else {
@@ -61,8 +61,8 @@ runs:
           }
 
           await github.rest.repos.createCommitStatus({
-            ...context.repo, sha: headSha, context: 'Code Understanding Check',
-            state: 'pending', description: 'Answer the quiz to pass',
+            ...context.repo, sha: headSha, context: 'VibeCheck',
+            state: 'pending', description: 'Take the VibeCheck',
           });
 
     # --- Grade (developer checked the Submit box) ---
@@ -70,22 +70,22 @@ runs:
       if: >
         github.event_name == 'issue_comment' &&
         github.event.issue.pull_request &&
-        contains(github.event.comment.body, '<!-- pr-quiz -->') &&
+        contains(github.event.comment.body, '<!-- vibecheck -->') &&
         contains(github.event.comment.body, '[x] ✅') &&
-        !contains(github.event.comment.body, '<!-- pr-quiz:graded -->')
+        !contains(github.event.comment.body, '<!-- vibecheck:graded -->')
       uses: actions/github-script@v7
       env:
-        QUIZ_SERVER_URL: ${{ inputs.server-url }}
+        VIBECHECK_SERVER_URL: ${{ inputs.server-url }}
       with:
         script: |
-          const base = (process.env.QUIZ_SERVER_URL || '')
+          const base = (process.env.VIBECHECK_SERVER_URL || '')
             .replace(/\/$/, '').replace(/^(?!https?:\/\/)/, 'https://');
           const repo = `${context.repo.owner}/${context.repo.repo}`;
           const pr = context.payload.issue.number;
           const commentBody = context.payload.comment.body;
 
-          const idToken = await core.getIDToken('pr-quiz');
-          const res = await fetch(`${base}/quiz/grade`, {
+          const idToken = await core.getIDToken('vibecheck');
+          const res = await fetch(`${base}/vibecheck/grade`, {
             method: 'POST',
             headers: { 'content-type': 'application/json', authorization: `Bearer ${idToken}` },
             body: JSON.stringify({ repo, pr, commentBody }),
@@ -100,9 +100,9 @@ runs:
 
           const { data: prData } = await github.rest.pulls.get({ ...context.repo, pull_number: pr });
           await github.rest.repos.createCommitStatus({
-            ...context.repo, sha: prData.head.sha, context: 'Code Understanding Check',
+            ...context.repo, sha: prData.head.sha, context: 'VibeCheck',
             state: result.passed ? 'success' : 'failure',
-            description: `Quiz ${result.passed ? 'passed' : 'failed'}: ${result.score}/${result.total}`,
+            description: `VibeCheck ${result.passed ? 'passed' : 'worth another look'}: ${result.score}/${result.total}`,
           });
 
     # --- Cleanup (PR merged/closed) ---
@@ -110,15 +110,15 @@ runs:
       if: github.event_name == 'pull_request' && github.event.action == 'closed'
       uses: actions/github-script@v7
       env:
-        QUIZ_SERVER_URL: ${{ inputs.server-url }}
+        VIBECHECK_SERVER_URL: ${{ inputs.server-url }}
       with:
         script: |
-          const base = (process.env.QUIZ_SERVER_URL || '')
+          const base = (process.env.VIBECHECK_SERVER_URL || '')
             .replace(/\/$/, '').replace(/^(?!https?:\/\/)/, 'https://');
           const repo = `${context.repo.owner}/${context.repo.repo}`;
           const pr = context.payload.pull_request.number;
-          const idToken = await core.getIDToken('pr-quiz');
-          await fetch(`${base}/quiz/cleanup`, {
+          const idToken = await core.getIDToken('vibecheck');
+          await fetch(`${base}/vibecheck/cleanup`, {
             method: 'POST',
             headers: { 'content-type': 'application/json', authorization: `Bearer ${idToken}` },
             body: JSON.stringify({ repo, pr }),

@@ -2,7 +2,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { Question, QuizConfig } from "./types";
 
 const client = new Anthropic();
-const MODEL = process.env.QUIZ_MODEL || "claude-opus-4-8";
+const MODEL = process.env.VIBECHECK_MODEL || "claude-opus-4-8";
 
 // Cap the diff we send to the model so a huge PR can't blow the context window.
 const MAX_DIFF_CHARS = 120_000;

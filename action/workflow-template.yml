@@ -1,12 +1,12 @@
-# Copy this into a consuming repo as .github/workflows/pr-quiz.yml
+# Copy this into a consuming repo as .github/workflows/vibecheck.yml
 #
-# Set QUIZ_SERVER_URL (your deployed server's URL) as a repo OR org variable:
+# Set VIBECHECK_SERVER_URL (your deployed server's URL) as a repo OR org variable:
 #   Settings -> Secrets and variables -> Actions -> Variables
 # Setting it at the ORG level means every repo inherits it — then adding the
 # quiz to a new repo is just dropping in this file.
 #
 # No Anthropic key here — the server holds it. Auth is GitHub Actions OIDC.
-name: PR Quiz
+name: VibeCheck
 
 on:
   pull_request:
@@ -24,6 +24,6 @@ jobs:
   quiz:
     runs-on: ubuntu-latest
     steps:
-      - uses: boJackEden/pr-quiz@v1
+      - uses: boJackEden/vibecheck@v1
         with:
-          server-url: ${{ vars.QUIZ_SERVER_URL }}
+          server-url: ${{ vars.VIBECHECK_SERVER_URL }}

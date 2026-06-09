@@ -8,7 +8,7 @@ function normalizeRatio(raw: number): number {
 }
 
 const DEFAULT_PASS_RATIO = normalizeRatio(
-  parseFloat(process.env.QUIZ_PASS_RATIO || "0.7")
+  parseFloat(process.env.VIBECHECK_PASS_RATIO || "0.7")
 );
 
 // Grade picked answers against the stored correct answers.

@@ -6,10 +6,10 @@ import { createRemoteJWKSet, jwtVerify } from "jose";
 // and check the repo owner against an allowlist — so only workflows in YOUR
 // repos can call the server. No shared secret to distribute or leak.
 const ISSUER = "https://token.actions.githubusercontent.com";
-const AUDIENCE = process.env.QUIZ_OIDC_AUDIENCE || "pr-quiz";
+const AUDIENCE = process.env.VIBECHECK_OIDC_AUDIENCE || "vibecheck";
 
 // Comma-separated GitHub owners/orgs allowed to call the server, e.g. "boJackEden".
-export const ALLOWED_OWNERS = (process.env.QUIZ_ALLOWED_OWNERS || "")
+export const ALLOWED_OWNERS = (process.env.VIBECHECK_ALLOWED_OWNERS || "")
   .split(",")
   .map((s) => s.trim().toLowerCase())
   .filter(Boolean);

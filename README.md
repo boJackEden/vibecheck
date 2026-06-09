@@ -1,8 +1,8 @@
-# pr-quiz
+# VibeCheck
 
-An AI-generated, multiple-choice **code-understanding quiz** that runs when you open a pull request — a "is there still a human in the loop?" gate for AI-assisted development. The quiz lives **inline in the PR comment thread** as a clickable accordion; the developer checks their answers and a Submit box, and a commit status reports pass/fail.
+**Make sure _you_ understand what's going into _your_ codebase.** VibeCheck runs when you open a pull request and asks a few AI-generated multiple-choice questions about the diff — a "is there still a human in the loop?" check for AI-assisted development. It lives **inline in the PR comment thread** as a clickable accordion; you check your answers and a Submit box, and a commit status reports the result.
 
-It's a **non-blocker by default**: the quiz posts a `Code Understanding Check` commit status that shows on the PR but only gates merge if you opt in via branch protection.
+It's a **non-blocker by default**: the quiz posts a `VibeCheck` commit status that shows on the PR but only gates merge if you opt in via branch protection.
 
 **This is a self-hosted tool.** You deploy your own copy, so quizzes run on *your* Anthropic key and your code never passes through anyone else's server. No central service, no sign-up, no per-user allowlist — see [Deploy your own](#deploy-your-own) below.
 
@@ -15,9 +15,9 @@ It's a **non-blocker by default**: the quiz posts a `Code Understanding Check` c
 1. **Deploy the server.** Click the button (or in Railway: New Project → Deploy from GitHub → this repo, root directory `server/`).
 2. **Set two variables** when prompted:
    - `ANTHROPIC_API_KEY` (required) — your Anthropic key
-   - `QUIZ_ALLOWED_OWNERS` (required) — **your own** GitHub username or org, e.g. `boJackEden`. This locks the server to workflows from *your* repos. You're allowlisting yourself, not other users — there's no list of "people allowed to use the tool."
+   - `VIBECHECK_ALLOWED_OWNERS` (required) — **your own** GitHub username or org, e.g. `boJackEden`. This locks the server to workflows from *your* repos. You're allowlisting yourself, not other users — there's no list of "people allowed to use the tool."
 3. **Generate a public domain** — Railway → service → Settings → Networking → Generate Domain. Confirm `https://<domain>/health` returns `{"ok":true}`.
-4. **Install in any of your repos** — copy [`action/workflow-template.yml`](action/workflow-template.yml) to `.github/workflows/pr-quiz.yml`. It's ~16 lines and just references the published action (`uses: boJackEden/pr-quiz@v1`). Then set `QUIZ_SERVER_URL` = your domain as a variable — **set it at the org level** and every repo inherits it. Open a PR.
+4. **Install in any of your repos** — copy [`action/workflow-template.yml`](action/workflow-template.yml) to `.github/workflows/vibecheck.yml`. It's ~16 lines and just references the published action (`uses: boJackEden/vibecheck@v1`). Then set `VIBECHECK_SERVER_URL` = your domain as a variable — **set it at the org level** and every repo inherits it. Open a PR.
 
 That's it — every repo under an allowlisted owner works with just step 4, no extra secrets (auth is via GitHub Actions OIDC). Set the org variable once and adding the quiz to a new repo is a single 16-line file.
 
@@ -52,8 +52,8 @@ The interactive UI uses GitHub's native **markdown task-list checkboxes** — cl
 ## Repo layout
 
 ```
-pr-quiz/
-├── action.yml                  # the reusable composite action (uses: boJackEden/pr-quiz@v1)
+vibecheck/
+├── action.yml                  # the reusable composite action (uses: boJackEden/vibecheck@v1)
 ├── action/
 │   └── workflow-template.yml   # the ~16-line workflow consuming repos copy in
 └── server/
@@ -97,36 +97,36 @@ Point Railway at this repo with root directory `server/` (the Dockerfile builds 
 
 ### 4. Install in a consuming repo
 
-Copy `action/workflow-template.yml` to that repo as `.github/workflows/pr-quiz.yml`, then add a repository **variable** `QUIZ_SERVER_URL` pointing at your deployed server (Settings → Secrets and variables → Actions → Variables). Open a PR to see it run.
+Copy `action/workflow-template.yml` to that repo as `.github/workflows/vibecheck.yml`, then add a repository **variable** `VIBECHECK_SERVER_URL` pointing at your deployed server (Settings → Secrets and variables → Actions → Variables). Open a PR to see it run.
 
-To make the quiz **block merge**, add `Code Understanding Check` as a required status check in branch protection. Leave it out to keep the quiz a non-blocker.
+To make the quiz **block merge**, add `VibeCheck` as a required status check in branch protection. Leave it out to keep the quiz a non-blocker.
 
 ## Endpoints
 
 | Method | Path | Body | Returns |
 |---|---|---|---|
 | GET | `/health` | — | `{ ok, sessions }` |
-| POST | `/quiz/generate` | `{ repo, pr, diff, config? }` | `{ comment, count }` |
-| POST | `/quiz/grade` | `{ repo, pr, commentBody }` | `{ submitted, comment?, passed?, score?, total? }` |
-| POST | `/quiz/cleanup` | `{ repo, pr }` | `{ cleaned }` |
+| POST | `/vibecheck/generate` | `{ repo, pr, diff, config? }` | `{ comment, count }` |
+| POST | `/vibecheck/grade` | `{ repo, pr, commentBody }` | `{ submitted, comment?, passed?, score?, total? }` |
+| POST | `/vibecheck/cleanup` | `{ repo, pr }` | `{ cleaned }` |
 
 The server never needs GitHub credentials — the workflow runs in repo context, grabs the diff, and does all GitHub writes itself.
 
 ## Security (GitHub Actions OIDC)
 
-The `/quiz/*` endpoints are locked down with **GitHub Actions OIDC** — no shared secret. Each workflow run mints a short-lived token that cryptographically proves it's a real Actions run from one of your repos; the server verifies it against GitHub's public keys and checks the repo owner against an allowlist.
+The `/vibecheck/*` endpoints are locked down with **GitHub Actions OIDC** — no shared secret. Each workflow run mints a short-lived token that cryptographically proves it's a real Actions run from one of your repos; the server verifies it against GitHub's public keys and checks the repo owner against an allowlist.
 
 Set on the **server** (Railway variable):
 
 ```
-QUIZ_ALLOWED_OWNERS=boJackEden        # comma-separated owners/orgs allowed to call the server
+VIBECHECK_ALLOWED_OWNERS=boJackEden        # comma-separated owners/orgs allowed to call the server
 ```
 
-That's the only setup. Any repo under an allowlisted owner works by **just copying the workflow** — the workflow already requests the OIDC token (`id-token: write` + `core.getIDToken('pr-quiz')`) and sends it as a bearer token. No per-repo secret.
+That's the only setup. Any repo under an allowlisted owner works by **just copying the workflow** — the workflow already requests the OIDC token (`id-token: write` + `core.getIDToken('vibecheck')`) and sends it as a bearer token. No per-repo secret.
 
 Defense in depth: the token also names the calling repo, and the server rejects a request whose `repo` body doesn't match the token's repository — so a workflow in one repo can't touch another's quiz session.
 
-> If `QUIZ_ALLOWED_OWNERS` is unset the endpoints are open (fine for local dev, logged as a warning at boot). Always set it in production.
+> If `VIBECHECK_ALLOWED_OWNERS` is unset the endpoints are open (fine for local dev, logged as a warning at boot). Always set it in production.
 
 ## Known MVP limitations
 
@@ -138,7 +138,7 @@ Defense in depth: the token also names the calling repo, and the server rejects 
 
 ## Tuning (post-MVP)
 
-`quiz.ts` accepts a `config` (`difficulty`, `focus`, `passRatio`) — wire it through the workflow as env/inputs to add difficulty modes. Pass threshold defaults to 70% (`QUIZ_PASS_RATIO`).
+`quiz.ts` accepts a `config` (`difficulty`, `focus`, `passRatio`) — wire it through the workflow as env/inputs to add difficulty modes. Pass threshold defaults to 70% (`VIBECHECK_PASS_RATIO`).
 
 ## Roadmap
 
