@@ -59,7 +59,6 @@ export function buildResultComment(questions: Question[], grade: Grade): string 
     parts.push("");
     parts.push(`- Your answer: ${pickedText}`);
     parts.push(`- Correct answer: **${q.correct})** ${escapeInline(correctOpt?.text ?? "")}`);
-    parts.push(`- ${escapeInline(q.explanation)}`);
     parts.push("");
     parts.push(`</details>`);
     parts.push("");
